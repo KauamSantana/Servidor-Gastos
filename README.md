@@ -8,7 +8,7 @@ A aplicação permite cadastrar, listar, editar e excluir gastos, e mostra um re
 | Camada | Tecnologia |
 |---|---|
 | Servidor | AWS EC2, Ubuntu Server |
-| Aplicação | Node.js + Express (API) e HTML/CSS/JS (tela) |
+| Aplicação | Node.js + Express (API) e HTML/CSS/JS com Chart.js (tela) |
 | Gerenciador de processo | PM2 (mantém a aplicação no ar e reinicia se cair) |
 | Banco de dados | PostgreSQL no AWS RDS (acesso só a partir do EC2) |
 | Repositório | GitHub |

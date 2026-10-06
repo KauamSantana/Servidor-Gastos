@@ -11,6 +11,8 @@ const PORTA = Number(process.env.PORT) || 3000;
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+// Biblioteca de gráficos servida pelo próprio servidor (sem depender de CDN)
+app.use('/vendor/chart.js', express.static(path.join(__dirname, 'node_modules/chart.js/dist')));
 
 function validar(corpo) {
   const descricao = String(corpo.descricao ?? '').trim();

@@ -4,62 +4,158 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Controle de Gastos</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2334d399'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header>
-    <h1>Controle de Gastos</h1>
-    <p>Trabalho 1 · Infraestrutura Cloud AWS</p>
+  <!-- Ícones (traço) reutilizados com <use href="#..."> -->
+  <svg xmlns="http://www.w3.org/2000/svg" class="sprite" aria-hidden="true">
+    <symbol id="i-carteira" viewBox="0 0 24 24"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></symbol>
+    <symbol id="i-calendario" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></symbol>
+    <symbol id="i-lista" viewBox="0 0 24 24"><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/></symbol>
+    <symbol id="i-etiqueta" viewBox="0 0 24 24"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5"/></symbol>
+    <symbol id="i-mais" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-editar" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></symbol>
+    <symbol id="i-lixeira" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></symbol>
+    <symbol id="i-busca" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-alerta" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></symbol>
+  </svg>
+
+  <header class="topo">
+    <div class="topo-conteudo">
+      <div class="marca">
+        <div class="logo"><svg class="icone"><use href="#i-carteira"/></svg></div>
+        <div>
+          <h1>Controle de Gastos</h1>
+          <p>Trabalho 1 · Infraestrutura Cloud AWS</p>
+        </div>
+      </div>
+      <div id="status" class="status">
+        <span class="status-ponto"></span>
+        <span id="status-texto">Verificando conexão…</span>
+      </div>
+    </div>
   </header>
 
   <main>
-    <section class="resumo">
-      <div class="card-resumo">
-        <span>Total gasto</span>
-        <strong id="total">R$ 0,00</strong>
-      </div>
-      <div class="card-resumo">
-        <span>Lançamentos</span>
-        <strong id="quantidade">0</strong>
-      </div>
-      <div class="card-resumo">
-        <span>Maior categoria</span>
-        <strong id="maior-categoria">—</strong>
-      </div>
+    <section class="kpis">
+      <article class="kpi">
+        <div class="kpi-icone"><svg class="icone"><use href="#i-carteira"/></svg></div>
+        <div class="kpi-corpo">
+          <span class="kpi-rotulo">Total gasto</span>
+          <strong id="kpi-total">R$ 0,00</strong>
+          <span class="kpi-sub" id="kpi-total-sub">—</span>
+        </div>
+      </article>
+      <article class="kpi">
+        <div class="kpi-icone"><svg class="icone"><use href="#i-calendario"/></svg></div>
+        <div class="kpi-corpo">
+          <span class="kpi-rotulo">Este mês</span>
+          <strong id="kpi-mes">R$ 0,00</strong>
+          <span class="kpi-sub" id="kpi-mes-sub">—</span>
+        </div>
+      </article>
+      <article class="kpi">
+        <div class="kpi-icone"><svg class="icone"><use href="#i-lista"/></svg></div>
+        <div class="kpi-corpo">
+          <span class="kpi-rotulo">Lançamentos</span>
+          <strong id="kpi-quantidade">0</strong>
+          <span class="kpi-sub" id="kpi-quantidade-sub">—</span>
+        </div>
+      </article>
+      <article class="kpi">
+        <div class="kpi-icone"><svg class="icone"><use href="#i-etiqueta"/></svg></div>
+        <div class="kpi-corpo">
+          <span class="kpi-rotulo">Maior categoria</span>
+          <strong id="kpi-categoria">—</strong>
+          <span class="kpi-sub" id="kpi-categoria-sub">—</span>
+        </div>
+      </article>
     </section>
 
-    <div class="colunas">
-      <section class="card">
-        <h2 id="titulo-form">Novo gasto</h2>
+    <section class="painel">
+      <article class="card card-form" id="card-form">
+        <header class="card-topo">
+          <div>
+            <h2 id="titulo-form">Novo gasto</h2>
+            <p class="sub" id="sub-form">Preencha e clique em cadastrar</p>
+          </div>
+        </header>
         <form id="form-gasto">
-          <label>Descrição
-            <input type="text" id="descricao" maxlength="120" placeholder="Ex.: Mercado" required>
+          <label class="campo">
+            <span>Descrição</span>
+            <input type="text" id="descricao" maxlength="120" placeholder="Ex.: Mercado do mês" required>
           </label>
-          <label>Valor (R$)
-            <input type="number" id="valor" min="0.01" step="0.01" placeholder="0,00" required>
-          </label>
-          <label>Categoria
-            <select id="categoria" required></select>
-          </label>
-          <label>Data
-            <input type="date" id="data" required>
-          </label>
-          <div class="botoes">
-            <button type="submit" id="btn-salvar">Cadastrar</button>
-            <button type="button" id="btn-cancelar" class="secundario" hidden>Cancelar edição</button>
+          <div class="linha-2">
+            <label class="campo">
+              <span>Valor</span>
+              <div class="input-prefixo">
+                <span>R$</span>
+                <input type="number" id="valor" min="0.01" step="0.01" placeholder="0,00" required>
+              </div>
+            </label>
+            <label class="campo">
+              <span>Data</span>
+              <input type="date" id="data" required>
+            </label>
+          </div>
+          <fieldset class="campo">
+            <legend>Categoria</legend>
+            <div id="categorias" class="pilulas"></div>
+          </fieldset>
+          <div class="acoes-form">
+            <button type="submit" class="btn btn-primario" id="btn-salvar">
+              <svg class="icone"><use href="#i-mais"/></svg>
+              <span>Cadastrar gasto</span>
+            </button>
+            <button type="button" class="btn btn-secundario" id="btn-cancelar" hidden>Cancelar</button>
           </div>
         </form>
-        <p id="mensagem" role="status"></p>
-      </section>
+      </article>
 
-      <section class="card">
-        <h2>Gastos por categoria</h2>
-        <div id="grafico"></div>
-      </section>
-    </div>
+      <article class="card card-grafico" id="card-categoria">
+        <header class="card-topo">
+          <div>
+            <h2>Por categoria</h2>
+            <p class="sub">Quanto foi gasto em cada categoria</p>
+          </div>
+        </header>
+        <div class="grafico-area">
+          <div class="grafico-canvas"><canvas id="grafico-categoria" role="img" aria-label="Gráfico de barras com o total gasto por categoria. Os valores também estão na tabela de lançamentos."></canvas></div>
+          <p class="grafico-vazio">Cadastre um gasto para ver o gráfico.</p>
+        </div>
+      </article>
+
+      <article class="card card-grafico" id="card-mes">
+        <header class="card-topo">
+          <div>
+            <h2>Por mês</h2>
+            <p class="sub">Últimos 6 meses · mês atual em destaque</p>
+          </div>
+        </header>
+        <div class="grafico-area">
+          <div class="grafico-canvas"><canvas id="grafico-mes" role="img" aria-label="Gráfico de colunas com o total gasto em cada um dos últimos 6 meses."></canvas></div>
+          <p class="grafico-vazio">Cadastre um gasto para ver o gráfico.</p>
+        </div>
+      </article>
+    </section>
 
     <section class="card">
-      <h2>Lançamentos</h2>
+      <header class="card-topo tabela-topo">
+        <div>
+          <h2>Lançamentos</h2>
+          <p class="sub" id="resumo-tabela">—</p>
+        </div>
+        <label class="busca">
+          <svg class="icone"><use href="#i-busca"/></svg>
+          <input type="search" id="busca" placeholder="Buscar pela descrição" aria-label="Buscar pela descrição">
+        </label>
+      </header>
+      <div id="filtros" class="filtros" aria-label="Filtrar por categoria"></div>
       <div class="tabela-container">
         <table>
           <thead>
@@ -68,7 +164,7 @@
               <th>Descrição</th>
               <th>Categoria</th>
               <th class="numero">Valor</th>
-              <th></th>
+              <th class="acoes"><span class="sr-only">Ações</span></th>
             </tr>
           </thead>
           <tbody id="lista"></tbody>
@@ -77,8 +173,25 @@
     </section>
   </main>
 
-  <footer id="status">Verificando conexão...</footer>
+  <footer class="rodape">
+    Node.js + Express · PostgreSQL no AWS RDS · Hospedado no AWS EC2
+  </footer>
 
+  <dialog id="modal-excluir" class="modal">
+    <form method="dialog">
+      <div class="modal-icone"><svg class="icone"><use href="#i-lixeira"/></svg></div>
+      <h3>Excluir gasto?</h3>
+      <p id="modal-texto"></p>
+      <div class="modal-acoes">
+        <button value="cancelar" class="btn btn-secundario">Cancelar</button>
+        <button value="confirmar" class="btn btn-perigo">Excluir</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <script src="/vendor/chart.js/chart.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

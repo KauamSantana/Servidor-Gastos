@@ -1,20 +1,38 @@
 const API = '/api/gastos';
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const moedaCompacta = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact', maximumFractionDigits: 1 });
+const mesCurto = new Intl.DateTimeFormat('pt-BR', { month: 'short' });
+const mesLongo = new Intl.DateTimeFormat('pt-BR', { month: 'long', year: 'numeric' });
+
+// Cada categoria tem uma cor fixa (paleta validada para daltonismo no fundo escuro).
+// A cor segue a categoria, nunca a posição dela no ranking.
+const PALETA = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300'];
+const COR_OUTROS = '#7d8b84';
+const FONTE_ROTULO = '500 12px Poppins, system-ui, sans-serif';
 
 const form = document.getElementById('form-gasto');
 const campos = {
   descricao: document.getElementById('descricao'),
   valor: document.getElementById('valor'),
-  categoria: document.getElementById('categoria'),
   data: document.getElementById('data'),
 };
+const cardForm = document.getElementById('card-form');
 const btnSalvar = document.getElementById('btn-salvar');
 const btnCancelar = document.getElementById('btn-cancelar');
-const tituloForm = document.getElementById('titulo-form');
-const mensagem = document.getElementById('mensagem');
+const modal = document.getElementById('modal-excluir');
 
+let categorias = [];
 let gastos = [];
 let editandoId = null;
+let idParaExcluir = null;
+let filtro = 'Todos';
+let busca = '';
+let graficoCategoria = null;
+let graficoMes = null;
+
+// ---------- utilidades ----------
+
+const css = (nome) => getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
 
 async function api(url, opcoes = {}) {
   const resp = await fetch(url, { headers: { 'Content-Type': 'application/json' }, ...opcoes });
@@ -41,76 +59,339 @@ function hoje() {
   return d.toISOString().slice(0, 10);
 }
 
-function avisar(texto, tipo) {
-  mensagem.textContent = texto;
-  mensagem.className = tipo;
+const capitalizar = (texto) => texto.charAt(0).toUpperCase() + texto.slice(1);
+const soma = (lista) => lista.reduce((total, g) => total + g.valor, 0);
+const plural = (n, singular, pluralTexto) => `${n} ${n === 1 ? singular : pluralTexto}`;
+const porcentagem = (parte, total) => (total ? Math.round((parte / total) * 100) : 0);
+
+function corDe(categoria) {
+  const i = categorias.indexOf(categoria);
+  if (categoria === 'Outros' || i < 0 || i >= PALETA.length) return COR_OUTROS;
+  return PALETA[i];
+}
+
+const medidor = document.createElement('canvas').getContext('2d');
+function larguraTexto(texto) {
+  medidor.font = FONTE_ROTULO;
+  return medidor.measureText(texto).width;
+}
+
+function toast(texto, tipo = 'ok') {
+  const el = document.createElement('div');
+  el.className = `toast ${tipo}`;
+  el.innerHTML = `<svg class="icone"><use href="#${tipo === 'ok' ? 'i-check' : 'i-alerta'}"/></svg><span></span>`;
+  el.querySelector('span').textContent = texto;
+  document.getElementById('toasts').append(el);
+  setTimeout(() => {
+    el.classList.add('saindo');
+    el.addEventListener('animationend', () => el.remove());
+  }, 3200);
+}
+
+// ---------- cálculos ----------
+
+function totaisPorCategoria() {
+  const mapa = new Map();
+  for (const g of gastos) {
+    const item = mapa.get(g.categoria) || { categoria: g.categoria, valor: 0, qtd: 0 };
+    item.valor += g.valor;
+    item.qtd += 1;
+    mapa.set(g.categoria, item);
+  }
+  return [...mapa.values()].sort((a, b) => b.valor - a.valor);
+}
+
+function totaisPorMes() {
+  const agora = new Date();
+  const meses = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(agora.getFullYear(), agora.getMonth() - i, 1);
+    meses.push({
+      chave: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+      rotulo: capitalizar(mesCurto.format(d).replace('.', '')),
+      titulo: capitalizar(mesLongo.format(d)),
+      valor: 0,
+    });
+  }
+  for (const g of gastos) {
+    const mes = meses.find((m) => m.chave === g.data.slice(0, 7));
+    if (mes) mes.valor += g.valor;
+  }
+  return meses;
+}
+
+function gastosVisiveis() {
+  const termo = busca.trim().toLowerCase();
+  return gastos.filter((g) =>
+    (filtro === 'Todos' || g.categoria === filtro) &&
+    (!termo || g.descricao.toLowerCase().includes(termo))
+  );
+}
+
+// ---------- gráficos ----------
+
+// Escreve o valor na ponta das barras (cor de texto, nunca a cor da série)
+const rotuloValor = {
+  id: 'rotuloValor',
+  afterDatasetsDraw(chart) {
+    const rotulos = chart.$rotulos || [];
+    const horizontal = chart.options.indexAxis === 'y';
+    const { ctx } = chart;
+    ctx.save();
+    ctx.font = FONTE_ROTULO;
+    ctx.fillStyle = css('--texto');
+    chart.getDatasetMeta(0).data.forEach((barra, i) => {
+      if (!rotulos[i]) return;
+      if (horizontal) {
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(rotulos[i], barra.x + 8, barra.y);
+      } else {
+        // Centraliza sobre a coluna sem deixar o texto sair da borda do gráfico
+        const metade = ctx.measureText(rotulos[i]).width / 2;
+        const x = Math.min(Math.max(barra.x, metade + 2), chart.width - metade - 2);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(rotulos[i], x, barra.y - 6);
+      }
+    });
+    ctx.restore();
+  },
+};
+
+function criarGraficos() {
+  if (!window.Chart) return;
+
+  Chart.defaults.font.family = 'Poppins, system-ui, sans-serif';
+  Chart.defaults.font.size = 12;
+  Chart.defaults.color = css('--suave');
+  Chart.defaults.plugins.legend.display = false;
+  Object.assign(Chart.defaults.plugins.tooltip, {
+    backgroundColor: css('--fundo'),
+    borderColor: css('--borda-forte'),
+    borderWidth: 1,
+    titleColor: css('--texto'),
+    bodyColor: css('--texto-2'),
+    titleFont: { weight: '600' },
+    padding: 10,
+    cornerRadius: 8,
+    boxPadding: 4,
+  });
+
+  graficoCategoria = new Chart(document.getElementById('grafico-categoria'), {
+    type: 'bar',
+    data: { labels: [], datasets: [{ data: [], backgroundColor: [], borderRadius: 4, borderSkipped: 'start', maxBarThickness: 22 }] },
+    options: {
+      indexAxis: 'y',
+      maintainAspectRatio: false,
+      layout: { padding: { right: 0 } },
+      interaction: { mode: 'index', axis: 'y', intersect: false },
+      scales: {
+        x: { display: false, beginAtZero: true },
+        y: { grid: { display: false }, border: { display: false }, ticks: { color: css('--texto-2') } },
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: (ctx) => {
+              const item = graficoCategoria.$dados[ctx.dataIndex];
+              return ` ${moeda.format(item.valor)} · ${plural(item.qtd, 'lançamento', 'lançamentos')}`;
+            },
+          },
+        },
+      },
+    },
+    plugins: [rotuloValor],
+  });
+
+  graficoMes = new Chart(document.getElementById('grafico-mes'), {
+    type: 'bar',
+    data: { labels: [], datasets: [{ data: [], backgroundColor: [], borderRadius: 4, borderSkipped: 'start', maxBarThickness: 24 }] },
+    options: {
+      maintainAspectRatio: false,
+      layout: { padding: { top: 24 } },
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: { grid: { display: false }, border: { color: css('--borda-forte') }, ticks: { color: css('--texto-2') } },
+        y: {
+          beginAtZero: true,
+          grace: '5%',
+          border: { display: false },
+          grid: { color: css('--grade') },
+          ticks: { maxTicksLimit: 5, callback: (valor) => moedaCompacta.format(valor) },
+        },
+      },
+      plugins: {
+        tooltip: {
+          displayColors: false,
+          callbacks: {
+            title: (itens) => graficoMes.$dados[itens[0].dataIndex].titulo,
+            label: (ctx) => moeda.format(ctx.parsed.y),
+          },
+        },
+      },
+    },
+    plugins: [rotuloValor],
+  });
+}
+
+function renderGraficos() {
+  const temDados = gastos.length > 0;
+  document.getElementById('card-categoria').classList.toggle('sem-dados', !temDados);
+  document.getElementById('card-mes').classList.toggle('sem-dados', !temDados);
+  if (!graficoCategoria) return;
+
+  const total = soma(gastos);
+  const porCategoria = totaisPorCategoria();
+  const rotulos = porCategoria.map((d) => `${moeda.format(d.valor)} · ${porcentagem(d.valor, total)}%`);
+  graficoCategoria.$dados = porCategoria;
+  graficoCategoria.$rotulos = rotulos;
+  graficoCategoria.data.labels = porCategoria.map((d) => d.categoria);
+  graficoCategoria.data.datasets[0].data = porCategoria.map((d) => d.valor);
+  graficoCategoria.data.datasets[0].backgroundColor = porCategoria.map((d) => corDe(d.categoria));
+  graficoCategoria.options.layout.padding.right = Math.max(0, ...rotulos.map(larguraTexto)) + 12;
+  graficoCategoria.update();
+
+  // Mês atual em destaque, meses anteriores em cinza
+  const porMes = totaisPorMes();
+  const ultimo = porMes.length - 1;
+  graficoMes.$dados = porMes;
+  graficoMes.$rotulos = porMes.map((m, i) => (i === ultimo && m.valor ? moeda.format(m.valor) : ''));
+  graficoMes.data.labels = porMes.map((m) => m.rotulo);
+  graficoMes.data.datasets[0].data = porMes.map((m) => m.valor);
+  graficoMes.data.datasets[0].backgroundColor = porMes.map((_, i) => (i === ultimo ? css('--destaque') : css('--apagado')));
+  graficoMes.update();
+}
+
+// ---------- tela ----------
+
+function renderKpis() {
+  const total = soma(gastos);
+  const mesAtual = hoje().slice(0, 7);
+  const doMes = gastos.filter((g) => g.data.startsWith(mesAtual));
+  const porCategoria = totaisPorCategoria();
+
+  document.getElementById('kpi-total').textContent = moeda.format(total);
+  document.getElementById('kpi-total-sub').textContent = gastos.length
+    ? `Média de ${moeda.format(total / gastos.length)}`
+    : 'Nenhum gasto ainda';
+
+  document.getElementById('kpi-mes').textContent = moeda.format(soma(doMes));
+  const nomeMesAtual = new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(new Date());
+  document.getElementById('kpi-mes-sub').textContent = `${plural(doMes.length, 'lançamento', 'lançamentos')} em ${nomeMesAtual}`;
+
+  document.getElementById('kpi-quantidade').textContent = gastos.length;
+  document.getElementById('kpi-quantidade-sub').textContent = plural(porCategoria.length, 'categoria usada', 'categorias usadas');
+
+  const kpiCategoria = document.getElementById('kpi-categoria');
+  const sub = document.getElementById('kpi-categoria-sub');
+  if (porCategoria.length) {
+    const maior = porCategoria[0];
+    kpiCategoria.innerHTML = `<span class="ponto" style="background:${corDe(maior.categoria)}"></span>${escapar(maior.categoria)}`;
+    sub.textContent = `${moeda.format(maior.valor)} · ${porcentagem(maior.valor, total)}% do total`;
+  } else {
+    kpiCategoria.textContent = '—';
+    sub.textContent = 'Nenhum gasto ainda';
+  }
+}
+
+function renderFiltros() {
+  const contagem = {};
+  for (const g of gastos) contagem[g.categoria] = (contagem[g.categoria] || 0) + 1;
+  if (filtro !== 'Todos' && !contagem[filtro]) filtro = 'Todos';
+
+  const opcoes = [{ nome: 'Todos', qtd: gastos.length }]
+    .concat(categorias.filter((c) => contagem[c]).map((c) => ({ nome: c, qtd: contagem[c] })));
+
+  document.getElementById('filtros').innerHTML = opcoes.map((op) => `
+    <button type="button" class="filtro ${op.nome === filtro ? 'ativo' : ''}" data-filtro="${escapar(op.nome)}" aria-pressed="${op.nome === filtro}">
+      ${op.nome === 'Todos' ? '' : `<span class="ponto" style="background:${corDe(op.nome)}"></span>`}
+      ${escapar(op.nome)}
+      <span class="contagem">${op.qtd}</span>
+    </button>
+  `).join('');
 }
 
 function renderTabela() {
-  const lista = document.getElementById('lista');
+  const lista = gastosVisiveis();
+  const corpo = document.getElementById('lista');
+
+  document.getElementById('resumo-tabela').textContent =
+    `${plural(lista.length, 'lançamento', 'lançamentos')} · ${moeda.format(soma(lista))}`;
+
   if (!gastos.length) {
-    lista.innerHTML = '<tr><td colspan="5" class="vazio">Nenhum gasto cadastrado ainda.</td></tr>';
+    corpo.innerHTML = `<tr><td colspan="5" class="vazio"><strong>Nenhum gasto cadastrado ainda</strong>Use o formulário para cadastrar o primeiro.</td></tr>`;
     return;
   }
-  lista.innerHTML = gastos.map((g) => `
-    <tr>
-      <td>${formatarData(g.data)}</td>
-      <td class="descricao">${escapar(g.descricao)}</td>
-      <td>${escapar(g.categoria)}</td>
+  if (!lista.length) {
+    corpo.innerHTML = `<tr><td colspan="5" class="vazio"><strong>Nada encontrado</strong>Nenhum lançamento corresponde a esse filtro.</td></tr>`;
+    return;
+  }
+
+  corpo.innerHTML = lista.map((g) => `
+    <tr class="${g.id === editandoId ? 'editando' : ''}">
+      <td class="col-data">${formatarData(g.data)}</td>
+      <td class="col-desc">${escapar(g.descricao)}</td>
+      <td><span class="badge"><span class="ponto" style="background:${corDe(g.categoria)}"></span>${escapar(g.categoria)}</span></td>
       <td class="numero">${moeda.format(g.valor)}</td>
       <td class="acoes">
-        <button class="editar" data-editar="${g.id}">Editar</button>
-        <button class="perigo" data-excluir="${g.id}">Excluir</button>
+        <div class="botoes-linha">
+          <button type="button" class="btn-acao" data-editar="${g.id}"><svg class="icone"><use href="#i-editar"/></svg>Editar</button>
+          <button type="button" class="btn-acao excluir" data-excluir="${g.id}"><svg class="icone"><use href="#i-lixeira"/></svg>Excluir</button>
+        </div>
       </td>
     </tr>
   `).join('');
 }
 
-function renderResumo() {
-  const total = gastos.reduce((soma, g) => soma + g.valor, 0);
-  const porCategoria = {};
-  for (const g of gastos) porCategoria[g.categoria] = (porCategoria[g.categoria] || 0) + g.valor;
-  const ordenadas = Object.entries(porCategoria).sort((a, b) => b[1] - a[1]);
+function renderPilulas() {
+  document.getElementById('categorias').innerHTML = categorias.map((c, i) => `
+    <label class="pilula">
+      <input type="radio" name="categoria" value="${escapar(c)}" ${i === 0 ? 'checked' : ''} required>
+      <span><span class="ponto" style="background:${corDe(c)}"></span>${escapar(c)}</span>
+    </label>
+  `).join('');
+}
 
-  document.getElementById('total').textContent = moeda.format(total);
-  document.getElementById('quantidade').textContent = gastos.length;
-  document.getElementById('maior-categoria').textContent = ordenadas.length ? ordenadas[0][0] : '—';
-
-  const grafico = document.getElementById('grafico');
-  if (!ordenadas.length) {
-    grafico.innerHTML = '<p class="vazio">Cadastre um gasto para ver o gráfico.</p>';
-    return;
-  }
-  grafico.innerHTML = ordenadas.map(([categoria, valor]) => {
-    const pct = (valor / total) * 100;
-    return `
-      <div class="barra">
-        <div class="barra-topo">
-          <span>${escapar(categoria)}</span>
-          <span>${moeda.format(valor)} · ${pct.toFixed(0)}%</span>
-        </div>
-        <div class="barra-fundo"><div class="barra-cheia" style="width: ${pct}%"></div></div>
-      </div>
-    `;
-  }).join('');
+function renderTudo() {
+  renderKpis();
+  renderGraficos();
+  renderFiltros();
+  renderTabela();
 }
 
 async function carregarGastos() {
   try {
     gastos = await api(API);
-    renderTabela();
-    renderResumo();
+    renderTudo();
   } catch (err) {
-    avisar(err.message, 'erro');
+    toast(err.message, 'erro');
   }
 }
+
+async function carregarStatus() {
+  const status = document.getElementById('status');
+  const texto = document.getElementById('status-texto');
+  try {
+    const s = await api('/api/status');
+    status.className = 'status ok';
+    texto.textContent = `Online · ${s.servidor} · RDS ${s.banco}`;
+  } catch {
+    status.className = 'status erro';
+    texto.textContent = 'Banco de dados desconectado';
+  }
+}
+
+// ---------- formulário ----------
 
 function limparForm() {
   editandoId = null;
   form.reset();
   campos.data.value = hoje();
-  tituloForm.textContent = 'Novo gasto';
-  btnSalvar.textContent = 'Cadastrar';
+  cardForm.classList.remove('editando');
+  document.getElementById('titulo-form').textContent = 'Novo gasto';
+  document.getElementById('sub-form').textContent = 'Preencha e clique em cadastrar';
+  btnSalvar.innerHTML = '<svg class="icone"><use href="#i-mais"/></svg><span>Cadastrar gasto</span>';
   btnCancelar.hidden = true;
 }
 
@@ -120,77 +401,107 @@ function editar(id) {
   editandoId = id;
   campos.descricao.value = g.descricao;
   campos.valor.value = g.valor;
-  campos.categoria.value = g.categoria;
   campos.data.value = g.data;
-  tituloForm.textContent = 'Editando gasto';
-  btnSalvar.textContent = 'Salvar alterações';
+  form.elements.categoria.value = g.categoria;
+  cardForm.classList.add('editando');
+  document.getElementById('titulo-form').textContent = 'Editando gasto';
+  document.getElementById('sub-form').textContent = 'Altere os campos e salve';
+  btnSalvar.innerHTML = '<svg class="icone"><use href="#i-check"/></svg><span>Salvar alterações</span>';
   btnCancelar.hidden = false;
-  avisar('', '');
-  campos.descricao.focus();
+  renderTabela();
+  cardForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  campos.descricao.focus({ preventScroll: true });
 }
 
-async function excluir(id) {
+function pedirExclusao(id) {
   const g = gastos.find((item) => item.id === id);
-  if (!g || !confirm(`Excluir "${g.descricao}"?`)) return;
+  if (!g) return;
+  idParaExcluir = id;
+  document.getElementById('modal-texto').textContent = `"${g.descricao}" · ${moeda.format(g.valor)} será removido permanentemente.`;
+  modal.returnValue = '';
+  modal.showModal();
+}
+
+modal.addEventListener('close', async () => {
+  if (modal.returnValue !== 'confirmar' || idParaExcluir === null) return;
+  const id = idParaExcluir;
+  idParaExcluir = null;
   try {
     await api(`${API}/${id}`, { method: 'DELETE' });
     if (editandoId === id) limparForm();
-    avisar('Gasto excluído.', 'ok');
+    toast('Gasto excluído.');
     await carregarGastos();
   } catch (err) {
-    avisar(err.message, 'erro');
+    toast(err.message, 'erro');
   }
-}
+});
 
 form.addEventListener('submit', async (evento) => {
   evento.preventDefault();
   const corpo = JSON.stringify({
     descricao: campos.descricao.value,
     valor: campos.valor.value,
-    categoria: campos.categoria.value,
+    categoria: form.elements.categoria.value,
     data: campos.data.value,
   });
+  btnSalvar.disabled = true;
   try {
     if (editandoId) {
       await api(`${API}/${editandoId}`, { method: 'PUT', body: corpo });
-      avisar('Gasto atualizado.', 'ok');
+      toast('Gasto atualizado.');
     } else {
       await api(API, { method: 'POST', body: corpo });
-      avisar('Gasto cadastrado.', 'ok');
+      toast('Gasto cadastrado.');
     }
     limparForm();
     await carregarGastos();
   } catch (err) {
-    avisar(err.message, 'erro');
+    toast(err.message, 'erro');
+  } finally {
+    btnSalvar.disabled = false;
   }
 });
 
 btnCancelar.addEventListener('click', () => {
   limparForm();
-  avisar('', '');
+  renderTabela();
 });
 
 document.getElementById('lista').addEventListener('click', (evento) => {
-  const { editar: idEditar, excluir: idExcluir } = evento.target.dataset;
-  if (idEditar) editar(Number(idEditar));
-  if (idExcluir) excluir(Number(idExcluir));
+  const botaoEditar = evento.target.closest('[data-editar]');
+  const botaoExcluir = evento.target.closest('[data-excluir]');
+  if (botaoEditar) editar(Number(botaoEditar.dataset.editar));
+  if (botaoExcluir) pedirExclusao(Number(botaoExcluir.dataset.excluir));
 });
 
-async function carregarCategorias() {
-  const categorias = await api('/api/categorias');
-  campos.categoria.innerHTML = categorias.map((c) => `<option>${escapar(c)}</option>`).join('');
-}
+document.getElementById('filtros').addEventListener('click', (evento) => {
+  const botao = evento.target.closest('[data-filtro]');
+  if (!botao) return;
+  filtro = botao.dataset.filtro;
+  renderFiltros();
+  renderTabela();
+});
 
-async function carregarStatus() {
-  const rodape = document.getElementById('status');
+document.getElementById('busca').addEventListener('input', (evento) => {
+  busca = evento.target.value;
+  renderTabela();
+});
+
+// ---------- início ----------
+
+async function iniciar() {
   try {
-    const s = await api('/api/status');
-    rodape.textContent = `Servidor: ${s.servidor} · Banco de dados: ${s.banco}`;
+    categorias = await api('/api/categorias');
   } catch {
-    rodape.textContent = 'Banco de dados: sem conexão';
+    toast('Não foi possível carregar as categorias.', 'erro');
   }
+  renderPilulas();
+  limparForm();
+  // Espera a fonte carregar para os gráficos já desenharem com a Poppins
+  await document.fonts.ready;
+  criarGraficos();
+  await carregarGastos();
+  carregarStatus();
 }
 
-carregarCategorias().then(limparForm);
-carregarGastos();
-carregarStatus();
+iniciar();
