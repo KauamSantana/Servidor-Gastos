@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Controle de Gastos</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Controle de Gastos</h1>
+    <p>Trabalho 1 · Infraestrutura Cloud AWS</p>
+  </header>
+
+  <main>
+    <section class="resumo">
+      <div class="card-resumo">
+        <span>Total gasto</span>
+        <strong id="total">R$ 0,00</strong>
+      </div>
+      <div class="card-resumo">
+        <span>Lançamentos</span>
+        <strong id="quantidade">0</strong>
+      </div>
+      <div class="card-resumo">
+        <span>Maior categoria</span>
+        <strong id="maior-categoria">—</strong>
+      </div>
+    </section>
+
+    <div class="colunas">
+      <section class="card">
+        <h2 id="titulo-form">Novo gasto</h2>
+        <form id="form-gasto">
+          <label>Descrição
+            <input type="text" id="descricao" maxlength="120" placeholder="Ex.: Mercado" required>
+          </label>
+          <label>Valor (R$)
+            <input type="number" id="valor" min="0.01" step="0.01" placeholder="0,00" required>
+          </label>
+          <label>Categoria
+            <select id="categoria" required></select>
+          </label>
+          <label>Data
+            <input type="date" id="data" required>
+          </label>
+          <div class="botoes">
+            <button type="submit" id="btn-salvar">Cadastrar</button>
+            <button type="button" id="btn-cancelar" class="secundario" hidden>Cancelar edição</button>
+          </div>
+        </form>
+        <p id="mensagem" role="status"></p>
+      </section>
+
+      <section class="card">
+        <h2>Gastos por categoria</h2>
+        <div id="grafico"></div>
+      </section>
+    </div>
+
+    <section class="card">
+      <h2>Lançamentos</h2>
+      <div class="tabela-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Descrição</th>
+              <th>Categoria</th>
+              <th class="numero">Valor</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="lista"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <footer id="status">Verificando conexão...</footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
