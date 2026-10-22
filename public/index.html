@@ -24,6 +24,8 @@
     <symbol id="i-busca" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
     <symbol id="i-alerta" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/></symbol>
     <symbol id="i-fechar" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="i-seta" viewBox="0 0 24 24"><path d="M22 7 13.5 15.5 8.5 10.5 2 17"/><path d="M16 7h6v6"/></symbol>
+    <symbol id="i-filtro" viewBox="0 0 24 24"><path d="M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z"/></symbol>
   </svg>
 
   <header class="topo">
@@ -49,6 +51,27 @@
       </button>
     </div>
 
+    <!-- Filtros: valem para as duas abas -->
+    <section class="filtros-globais" aria-label="Filtros">
+      <span class="filtros-titulo"><svg class="icone"><use href="#i-filtro"/></svg>Filtros</span>
+      <label class="campo-data">
+        <span>De</span>
+        <input type="date" id="data-de" aria-label="Data inicial">
+      </label>
+      <label class="campo-data">
+        <span>Até</span>
+        <input type="date" id="data-ate" aria-label="Data final">
+      </label>
+      <label class="campo-select">
+        <span>Categoria</span>
+        <select id="filtro-categoria" aria-label="Categoria">
+          <option value="Todos">Todas</option>
+        </select>
+      </label>
+      <button type="button" class="btn-limpar" id="btn-limpar-filtros" hidden>Limpar filtros</button>
+      <p class="dica">Dica: clique nas barras dos gráficos para filtrar</p>
+    </section>
+
     <section id="aba-visao" class="painel-aba" role="tabpanel">
       <div class="kpis">
         <article class="kpi">
@@ -60,11 +83,11 @@
           </div>
         </article>
         <article class="kpi">
-          <div class="kpi-icone"><svg class="icone"><use href="#i-calendario"/></svg></div>
+          <div class="kpi-icone"><svg class="icone"><use href="#i-seta"/></svg></div>
           <div class="kpi-corpo">
-            <span class="kpi-rotulo">Este mês</span>
-            <strong id="kpi-mes">R$ 0,00</strong>
-            <span class="kpi-sub" id="kpi-mes-sub">—</span>
+            <span class="kpi-rotulo">Maior gasto</span>
+            <strong id="kpi-maior">R$ 0,00</strong>
+            <span class="kpi-sub" id="kpi-maior-sub">—</span>
           </div>
         </article>
         <article class="kpi">
@@ -103,7 +126,7 @@
           <header class="card-topo">
             <div>
               <h2>Por mês</h2>
-              <p class="sub">Últimos 6 meses · mês atual em destaque</p>
+              <p class="sub" id="sub-mes">Últimos 6 meses · mês atual em destaque</p>
             </div>
           </header>
           <div class="grafico-area">
@@ -120,25 +143,11 @@
           <h2>Lançamentos</h2>
           <p class="sub" id="resumo-tabela">—</p>
         </div>
-        <div class="ferramentas">
-          <div class="periodo">
-            <label class="campo-data">
-              <span>De</span>
-              <input type="date" id="data-de" aria-label="Data inicial">
-            </label>
-            <label class="campo-data">
-              <span>Até</span>
-              <input type="date" id="data-ate" aria-label="Data final">
-            </label>
-            <button type="button" class="btn-limpar" id="btn-limpar-datas" hidden>Limpar datas</button>
-          </div>
-          <label class="busca">
-            <svg class="icone"><use href="#i-busca"/></svg>
-            <input type="search" id="busca" placeholder="Buscar pela descrição" aria-label="Buscar pela descrição">
-          </label>
-        </div>
+        <label class="busca">
+          <svg class="icone"><use href="#i-busca"/></svg>
+          <input type="search" id="busca" placeholder="Buscar pela descrição" aria-label="Buscar pela descrição">
+        </label>
       </header>
-      <div id="filtros" class="filtros" aria-label="Filtrar por categoria"></div>
       <div class="tabela-container">
         <table>
           <thead>

@@ -21,16 +21,24 @@ const erroForm = document.getElementById('erro-form');
 const modalGasto = document.getElementById('modal-gasto');
 const modalExcluir = document.getElementById('modal-excluir');
 
+const campoDe = document.getElementById('data-de');
+const campoAte = document.getElementById('data-ate');
+const campoCategoria = document.getElementById('filtro-categoria');
+const campoBusca = document.getElementById('busca');
+const btnLimparFiltros = document.getElementById('btn-limpar-filtros');
+
 let categorias = [];
 let gastos = [];
 let editandoId = null;
 let idParaExcluir = null;
-let filtro = 'Todos';
-let busca = '';
-let dataDe = '';
-let dataAte = '';
 let graficoCategoria = null;
 let graficoMes = null;
+
+// Filtros: os mesmos valem para a Visão geral e para os Lançamentos
+let filtroCategoria = 'Todos';
+let dataDe = '';
+let dataAte = '';
+let busca = '';
 
 // ---------- utilidades ----------
 
@@ -59,6 +67,12 @@ function hoje() {
   const d = new Date();
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
   return d.toISOString().slice(0, 10);
+}
+
+// "2026-09" -> "2026-09-30"
+function ultimoDiaDoMes(chave) {
+  const [ano, mes] = chave.split('-').map(Number);
+  return `${chave}-${String(new Date(ano, mes, 0).getDate()).padStart(2, '0')}`;
 }
 
 const capitalizar = (texto) => texto.charAt(0).toUpperCase() + texto.slice(1);
@@ -90,11 +104,30 @@ function toast(texto, tipo = 'ok') {
   }, 3200);
 }
 
-// ---------- cálculos ----------
+// ---------- filtros e cálculos ----------
 
-function totaisPorCategoria() {
+const temPeriodo = () => Boolean(dataDe || dataAte);
+const temFiltro = () => filtroCategoria !== 'Todos' || temPeriodo();
+// As datas são "AAAA-MM-DD", então dá para comparar como texto
+const noPeriodo = (data) => (!dataDe || data >= dataDe) && (!dataAte || data <= dataAte);
+const mesNoPeriodo = (m) => (!dataAte || m.inicio <= dataAte) && (!dataDe || m.fim >= dataDe);
+const mesSelecionado = (m) => dataDe === m.inicio && dataAte === m.fim;
+
+// Cada gráfico ignora o próprio filtro: o de categorias mostra todas as categorias
+// do período (com a escolhida em destaque) e o de meses mostra todos os meses da
+// categoria (com o período em destaque). Assim dá para clicar em outra barra.
+function gastosFiltrados({ categoria = true, periodo = true, texto = false } = {}) {
+  const termo = texto ? busca.trim().toLowerCase() : '';
+  return gastos.filter((g) =>
+    (!categoria || filtroCategoria === 'Todos' || g.categoria === filtroCategoria) &&
+    (!periodo || noPeriodo(g.data)) &&
+    (!termo || g.descricao.toLowerCase().includes(termo))
+  );
+}
+
+function totaisPorCategoria(lista) {
   const mapa = new Map();
-  for (const g of gastos) {
+  for (const g of lista) {
     const item = mapa.get(g.categoria) || { categoria: g.categoria, valor: 0, qtd: 0 };
     item.valor += g.valor;
     item.qtd += 1;
@@ -103,35 +136,39 @@ function totaisPorCategoria() {
   return [...mapa.values()].sort((a, b) => b.valor - a.valor);
 }
 
-function totaisPorMes() {
+function totaisPorMes(lista) {
   const agora = new Date();
   const meses = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date(agora.getFullYear(), agora.getMonth() - i, 1);
+    const chave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     meses.push({
-      chave: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
+      chave,
+      inicio: `${chave}-01`,
+      fim: ultimoDiaDoMes(chave),
       rotulo: capitalizar(mesCurto.format(d).replace('.', '')),
       titulo: capitalizar(mesLongo.format(d)),
       valor: 0,
     });
   }
-  for (const g of gastos) {
+  for (const g of lista) {
     const mes = meses.find((m) => m.chave === g.data.slice(0, 7));
     if (mes) mes.valor += g.valor;
   }
   return meses;
 }
 
-// Aplica categoria, período (De/Até) e busca. As datas são "AAAA-MM-DD",
-// então dá para comparar como texto.
-function gastosFiltrados({ ignorarCategoria = false } = {}) {
-  const termo = busca.trim().toLowerCase();
-  return gastos.filter((g) =>
-    (ignorarCategoria || filtro === 'Todos' || g.categoria === filtro) &&
-    (!dataDe || g.data >= dataDe) &&
-    (!dataAte || g.data <= dataAte) &&
-    (!termo || g.descricao.toLowerCase().includes(termo))
-  );
+// Clicar na barra já selecionada tira o filtro
+function alternarCategoria(categoria) {
+  filtroCategoria = filtroCategoria === categoria ? 'Todos' : categoria;
+  renderTudo();
+}
+
+function alternarMes(m) {
+  const tirar = mesSelecionado(m);
+  dataDe = tirar ? '' : m.inicio;
+  dataAte = tirar ? '' : m.fim;
+  renderTudo();
 }
 
 // ---------- gráficos ----------
@@ -165,6 +202,11 @@ const rotuloValor = {
   },
 };
 
+// Mãozinha no cursor quando está em cima de uma barra
+function cursorDeClique(evento, elementos) {
+  if (evento.native) evento.native.target.style.cursor = elementos.length ? 'pointer' : 'default';
+}
+
 function criarGraficos() {
   if (!window.Chart) return;
 
@@ -178,7 +220,10 @@ function criarGraficos() {
     borderWidth: 1,
     titleColor: css('--texto'),
     bodyColor: css('--texto-2'),
+    footerColor: css('--suave'),
     titleFont: { weight: '600' },
+    footerFont: { weight: '400' },
+    footerMarginTop: 6,
     padding: 10,
     cornerRadius: 8,
     boxPadding: 4,
@@ -192,6 +237,10 @@ function criarGraficos() {
       maintainAspectRatio: false,
       layout: { padding: { right: 0 } },
       interaction: { mode: 'index', axis: 'y', intersect: false },
+      onHover: cursorDeClique,
+      onClick: (_evento, elementos) => {
+        if (elementos.length) alternarCategoria(graficoCategoria.$dados[elementos[0].index].categoria);
+      },
       scales: {
         x: { display: false, beginAtZero: true },
         y: { grid: { display: false }, border: { display: false }, ticks: { color: css('--texto-2') } },
@@ -203,6 +252,9 @@ function criarGraficos() {
               const item = graficoCategoria.$dados[ctx.dataIndex];
               return ` ${moeda.format(item.valor)} · ${plural(item.qtd, 'lançamento', 'lançamentos')}`;
             },
+            footer: (itens) => (graficoCategoria.$dados[itens[0].dataIndex].categoria === filtroCategoria
+              ? 'Clique para tirar o filtro'
+              : 'Clique para filtrar'),
           },
         },
       },
@@ -217,6 +269,10 @@ function criarGraficos() {
       maintainAspectRatio: false,
       layout: { padding: { top: 24 } },
       interaction: { mode: 'index', intersect: false },
+      onHover: cursorDeClique,
+      onClick: (_evento, elementos) => {
+        if (elementos.length) alternarMes(graficoMes.$dados[elementos[0].index]);
+      },
       scales: {
         x: { grid: { display: false }, border: { color: css('--borda-forte') }, ticks: { color: css('--texto-2') } },
         y: {
@@ -233,6 +289,9 @@ function criarGraficos() {
           callbacks: {
             title: (itens) => graficoMes.$dados[itens[0].dataIndex].titulo,
             label: (ctx) => moeda.format(ctx.parsed.y),
+            footer: (itens) => (mesSelecionado(graficoMes.$dados[itens[0].dataIndex])
+              ? 'Clique para tirar o filtro'
+              : 'Clique para filtrar'),
           },
         },
       },
@@ -241,86 +300,108 @@ function criarGraficos() {
   });
 }
 
+function definirVazio(idCard, mensagem) {
+  const card = document.getElementById(idCard);
+  card.classList.toggle('sem-dados', Boolean(mensagem));
+  card.querySelector('.grafico-vazio').textContent = mensagem;
+}
+
 function renderGraficos() {
-  const temDados = gastos.length > 0;
-  document.getElementById('card-categoria').classList.toggle('sem-dados', !temDados);
-  document.getElementById('card-mes').classList.toggle('sem-dados', !temDados);
+  const doPeriodo = gastosFiltrados({ categoria: false });
+  const daCategoria = gastosFiltrados({ periodo: false });
+  const semNada = 'Clique em Novo gasto para começar.';
+  definirVazio('card-categoria', !gastos.length ? semNada : !doPeriodo.length ? 'Nenhum gasto nesse período.' : '');
+  definirVazio('card-mes', !gastos.length ? semNada : '');
+  document.getElementById('sub-mes').textContent = temPeriodo()
+    ? 'Últimos 6 meses · período filtrado em destaque'
+    : 'Últimos 6 meses · mês atual em destaque';
   if (!graficoCategoria) return;
 
-  const total = soma(gastos);
-  const porCategoria = totaisPorCategoria();
+  // Categoria escolhida com a cor cheia; as outras ficam apagadas
+  const total = soma(doPeriodo);
+  const porCategoria = totaisPorCategoria(doPeriodo);
   const rotulos = porCategoria.map((d) => `${moeda.format(d.valor)} · ${porcentagem(d.valor, total)}%`);
   graficoCategoria.$dados = porCategoria;
   graficoCategoria.$rotulos = rotulos;
   graficoCategoria.data.labels = porCategoria.map((d) => d.categoria);
   graficoCategoria.data.datasets[0].data = porCategoria.map((d) => d.valor);
-  graficoCategoria.data.datasets[0].backgroundColor = porCategoria.map((d) => corDe(d.categoria));
+  graficoCategoria.data.datasets[0].backgroundColor = porCategoria.map((d) =>
+    (filtroCategoria === 'Todos' || d.categoria === filtroCategoria ? corDe(d.categoria) : `${corDe(d.categoria)}40`));
   graficoCategoria.options.layout.padding.right = Math.max(0, ...rotulos.map(larguraTexto)) + 12;
   graficoCategoria.update();
 
-  // Mês atual em destaque, meses anteriores em cinza
-  const porMes = totaisPorMes();
-  const ultimo = porMes.length - 1;
+  // Sem período: mês atual em destaque. Com período: os meses filtrados em destaque.
+  const porMes = totaisPorMes(daCategoria);
+  const atual = porMes.length - 1;
+  const destaque = porMes.map((m, i) => (temPeriodo() ? mesNoPeriodo(m) : i === atual));
+  const formato = destaque.filter(Boolean).length > 1 ? moedaCompacta : moeda;
   graficoMes.$dados = porMes;
-  graficoMes.$rotulos = porMes.map((m, i) => (i === ultimo && m.valor ? moeda.format(m.valor) : ''));
+  graficoMes.$rotulos = porMes.map((m, i) => (destaque[i] && m.valor ? formato.format(m.valor) : ''));
   graficoMes.data.labels = porMes.map((m) => m.rotulo);
   graficoMes.data.datasets[0].data = porMes.map((m) => m.valor);
-  graficoMes.data.datasets[0].backgroundColor = porMes.map((_, i) => (i === ultimo ? css('--destaque') : css('--apagado')));
+  graficoMes.data.datasets[0].backgroundColor = destaque.map((d) => (d ? css('--destaque') : css('--apagado')));
   graficoMes.update();
 }
 
 // ---------- tela ----------
 
 function renderKpis() {
-  const total = soma(gastos);
-  const mesAtual = hoje().slice(0, 7);
-  const doMes = gastos.filter((g) => g.data.startsWith(mesAtual));
-  const porCategoria = totaisPorCategoria();
+  const lista = gastosFiltrados();
+  const total = soma(lista);
+  const porCategoria = totaisPorCategoria(lista);
+  const vazio = gastos.length ? 'Nenhum gasto com esses filtros' : 'Nenhum gasto ainda';
 
   document.getElementById('kpi-total').textContent = moeda.format(total);
-  document.getElementById('kpi-total-sub').textContent = gastos.length
-    ? `Média de ${moeda.format(total / gastos.length)}`
-    : 'Nenhum gasto ainda';
+  document.getElementById('kpi-total-sub').textContent = lista.length
+    ? `Média de ${moeda.format(total / lista.length)}`
+    : vazio;
 
-  document.getElementById('kpi-mes').textContent = moeda.format(soma(doMes));
-  const nomeMesAtual = new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(new Date());
-  document.getElementById('kpi-mes-sub').textContent = `${plural(doMes.length, 'lançamento', 'lançamentos')} em ${nomeMesAtual}`;
+  const maior = lista.reduce((atual, g) => (!atual || g.valor > atual.valor ? g : atual), null);
+  document.getElementById('kpi-maior').textContent = moeda.format(maior ? maior.valor : 0);
+  document.getElementById('kpi-maior-sub').textContent = maior
+    ? `${maior.descricao} · ${formatarData(maior.data)}`
+    : vazio;
 
-  document.getElementById('kpi-quantidade').textContent = gastos.length;
+  document.getElementById('kpi-quantidade').textContent = lista.length;
   document.getElementById('kpi-quantidade-sub').textContent = plural(porCategoria.length, 'categoria usada', 'categorias usadas');
 
   const kpiCategoria = document.getElementById('kpi-categoria');
   const sub = document.getElementById('kpi-categoria-sub');
   if (porCategoria.length) {
-    const maior = porCategoria[0];
-    kpiCategoria.innerHTML = `<span class="ponto" style="background:${corDe(maior.categoria)}"></span>${escapar(maior.categoria)}`;
-    sub.textContent = `${moeda.format(maior.valor)} · ${porcentagem(maior.valor, total)}% do total`;
+    const top = porCategoria[0];
+    kpiCategoria.innerHTML = `<span class="ponto" style="background:${corDe(top.categoria)}"></span>${escapar(top.categoria)}`;
+    sub.textContent = `${moeda.format(top.valor)} · ${porcentagem(top.valor, total)}% do total`;
   } else {
     kpiCategoria.textContent = '—';
-    sub.textContent = 'Nenhum gasto ainda';
+    sub.textContent = vazio;
   }
 }
 
-function renderFiltros() {
-  // Os contadores respeitam o período e a busca, mas não a categoria escolhida
-  const base = gastosFiltrados({ ignorarCategoria: true });
+// Opções do filtro de categoria, com a quantidade de gastos no período
+function renderOpcoesCategoria() {
+  const doPeriodo = gastosFiltrados({ categoria: false });
   const contagem = {};
-  for (const g of base) contagem[g.categoria] = (contagem[g.categoria] || 0) + 1;
+  for (const g of doPeriodo) contagem[g.categoria] = (contagem[g.categoria] || 0) + 1;
+  campoCategoria.innerHTML = [`<option value="Todos">Todas (${doPeriodo.length})</option>`]
+    .concat(categorias.map((c) => `<option value="${escapar(c)}">${escapar(c)} (${contagem[c] || 0})</option>`))
+    .join('');
+  campoCategoria.value = filtroCategoria;
+}
 
-  const opcoes = [{ nome: 'Todos', qtd: base.length }]
-    .concat(categorias.filter((c) => contagem[c] || c === filtro).map((c) => ({ nome: c, qtd: contagem[c] || 0 })));
-
-  document.getElementById('filtros').innerHTML = opcoes.map((op) => `
-    <button type="button" class="filtro ${op.nome === filtro ? 'ativo' : ''}" data-filtro="${escapar(op.nome)}" aria-pressed="${op.nome === filtro}">
-      ${op.nome === 'Todos' ? '' : `<span class="ponto" style="background:${corDe(op.nome)}"></span>`}
-      ${escapar(op.nome)}
-      <span class="contagem">${op.qtd}</span>
-    </button>
-  `).join('');
+// Deixa os campos da barra de filtros iguais ao filtro aplicado
+// (o filtro pode ter vindo de um clique no gráfico)
+function renderEstadoFiltros() {
+  campoDe.value = dataDe;
+  campoAte.value = dataAte;
+  campoDe.closest('.campo-data').classList.toggle('preenchido', Boolean(dataDe));
+  campoAte.closest('.campo-data').classList.toggle('preenchido', Boolean(dataAte));
+  campoCategoria.closest('.campo-select').classList.toggle('preenchido', filtroCategoria !== 'Todos');
+  btnLimparFiltros.hidden = !temFiltro();
+  document.getElementById('aba-contagem').textContent = gastosFiltrados().length;
 }
 
 function renderTabela() {
-  const lista = gastosFiltrados();
+  const lista = gastosFiltrados({ texto: true });
   const corpo = document.getElementById('lista');
 
   document.getElementById('resumo-tabela').textContent =
@@ -331,7 +412,7 @@ function renderTabela() {
     return;
   }
   if (!lista.length) {
-    corpo.innerHTML = `<tr><td colspan="5" class="vazio"><strong>Nada encontrado</strong>Nenhum lançamento corresponde a esse filtro.</td></tr>`;
+    corpo.innerHTML = `<tr><td colspan="5" class="vazio"><strong>Nada encontrado</strong>Nenhum lançamento corresponde aos filtros.</td></tr>`;
     return;
   }
 
@@ -361,10 +442,10 @@ function renderPilulas() {
 }
 
 function renderTudo() {
-  document.getElementById('aba-contagem').textContent = gastos.length;
+  renderOpcoesCategoria();
+  renderEstadoFiltros();
   renderKpis();
   renderGraficos();
-  renderFiltros();
   renderTabela();
 }
 
@@ -376,6 +457,37 @@ async function carregarGastos() {
     toast(err.message, 'erro');
   }
 }
+
+// ---------- barra de filtros ----------
+
+campoDe.addEventListener('change', () => {
+  dataDe = campoDe.value;
+  renderTudo();
+});
+
+campoAte.addEventListener('change', () => {
+  dataAte = campoAte.value;
+  renderTudo();
+});
+
+campoCategoria.addEventListener('change', () => {
+  filtroCategoria = campoCategoria.value;
+  renderTudo();
+});
+
+btnLimparFiltros.addEventListener('click', () => {
+  filtroCategoria = 'Todos';
+  dataDe = '';
+  dataAte = '';
+  busca = '';
+  campoBusca.value = '';
+  renderTudo();
+});
+
+campoBusca.addEventListener('input', () => {
+  busca = campoBusca.value;
+  renderTabela();
+});
 
 // ---------- abas ----------
 
@@ -511,42 +623,6 @@ document.getElementById('lista').addEventListener('click', (evento) => {
   const botaoExcluir = evento.target.closest('[data-excluir]');
   if (botaoEditar) editar(Number(botaoEditar.dataset.editar));
   if (botaoExcluir) pedirExclusao(Number(botaoExcluir.dataset.excluir));
-});
-
-document.getElementById('filtros').addEventListener('click', (evento) => {
-  const botao = evento.target.closest('[data-filtro]');
-  if (!botao) return;
-  filtro = botao.dataset.filtro;
-  renderFiltros();
-  renderTabela();
-});
-
-document.getElementById('busca').addEventListener('input', (evento) => {
-  busca = evento.target.value;
-  renderFiltros();
-  renderTabela();
-});
-
-// ---------- filtro por período ----------
-
-const campoDe = document.getElementById('data-de');
-const campoAte = document.getElementById('data-ate');
-const btnLimparDatas = document.getElementById('btn-limpar-datas');
-
-function aplicarPeriodo() {
-  dataDe = campoDe.value;
-  dataAte = campoAte.value;
-  btnLimparDatas.hidden = !dataDe && !dataAte;
-  renderFiltros();
-  renderTabela();
-}
-
-campoDe.addEventListener('change', aplicarPeriodo);
-campoAte.addEventListener('change', aplicarPeriodo);
-btnLimparDatas.addEventListener('click', () => {
-  campoDe.value = '';
-  campoAte.value = '';
-  aplicarPeriodo();
 });
 
 // ---------- início ----------
