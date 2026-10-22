@@ -30,31 +30,24 @@
     <div class="topo-conteudo">
       <div class="marca">
         <div class="logo"><svg class="icone"><use href="#i-carteira"/></svg></div>
-        <div>
-          <h1>Controle de Gastos</h1>
-          <p>Trabalho 1 · Infraestrutura Cloud AWS</p>
-        </div>
-      </div>
-      <div class="topo-acoes">
-        <div id="status" class="status">
-          <span class="status-ponto"></span>
-          <span id="status-texto">Verificando conexão…</span>
-        </div>
-        <button type="button" class="btn btn-primario" id="btn-novo">
-          <svg class="icone"><use href="#i-mais"/></svg>
-          <span>Novo gasto</span>
-        </button>
+        <h1>Controle de Gastos</h1>
       </div>
     </div>
   </header>
 
   <main>
-    <nav class="abas" role="tablist" aria-label="Seções">
-      <button type="button" class="aba ativa" role="tab" data-aba="visao" aria-selected="true">Visão geral</button>
-      <button type="button" class="aba" role="tab" data-aba="lancamentos" aria-selected="false">
-        Lançamentos <span class="contagem" id="aba-contagem">0</span>
+    <div class="barra">
+      <nav class="abas" role="tablist" aria-label="Seções">
+        <button type="button" class="aba ativa" role="tab" data-aba="visao" aria-selected="true">Visão geral</button>
+        <button type="button" class="aba" role="tab" data-aba="lancamentos" aria-selected="false">
+          Lançamentos <span class="contagem" id="aba-contagem">0</span>
+        </button>
+      </nav>
+      <button type="button" class="btn btn-primario" id="btn-novo">
+        <svg class="icone"><use href="#i-mais"/></svg>
+        <span>Novo gasto</span>
       </button>
-    </nav>
+    </div>
 
     <section id="aba-visao" class="painel-aba" role="tabpanel">
       <div class="kpis">
@@ -127,10 +120,23 @@
           <h2>Lançamentos</h2>
           <p class="sub" id="resumo-tabela">—</p>
         </div>
-        <label class="busca">
-          <svg class="icone"><use href="#i-busca"/></svg>
-          <input type="search" id="busca" placeholder="Buscar pela descrição" aria-label="Buscar pela descrição">
-        </label>
+        <div class="ferramentas">
+          <div class="periodo">
+            <label class="campo-data">
+              <span>De</span>
+              <input type="date" id="data-de" aria-label="Data inicial">
+            </label>
+            <label class="campo-data">
+              <span>Até</span>
+              <input type="date" id="data-ate" aria-label="Data final">
+            </label>
+            <button type="button" class="btn-limpar" id="btn-limpar-datas" hidden>Limpar datas</button>
+          </div>
+          <label class="busca">
+            <svg class="icone"><use href="#i-busca"/></svg>
+            <input type="search" id="busca" placeholder="Buscar pela descrição" aria-label="Buscar pela descrição">
+          </label>
+        </div>
       </header>
       <div id="filtros" class="filtros" aria-label="Filtrar por categoria"></div>
       <div class="tabela-container">
@@ -149,10 +155,6 @@
       </div>
     </section>
   </main>
-
-  <footer class="rodape">
-    Node.js + Express · PostgreSQL no AWS RDS · Hospedado no AWS EC2
-  </footer>
 
   <dialog id="modal-gasto" class="modal modal-form" aria-labelledby="titulo-form">
     <form id="form-gasto">

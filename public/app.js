@@ -27,6 +27,8 @@ let editandoId = null;
 let idParaExcluir = null;
 let filtro = 'Todos';
 let busca = '';
+let dataDe = '';
+let dataAte = '';
 let graficoCategoria = null;
 let graficoMes = null;
 
@@ -120,10 +122,14 @@ function totaisPorMes() {
   return meses;
 }
 
-function gastosVisiveis() {
+// Aplica categoria, período (De/Até) e busca. As datas são "AAAA-MM-DD",
+// então dá para comparar como texto.
+function gastosFiltrados({ ignorarCategoria = false } = {}) {
   const termo = busca.trim().toLowerCase();
   return gastos.filter((g) =>
-    (filtro === 'Todos' || g.categoria === filtro) &&
+    (ignorarCategoria || filtro === 'Todos' || g.categoria === filtro) &&
+    (!dataDe || g.data >= dataDe) &&
+    (!dataAte || g.data <= dataAte) &&
     (!termo || g.descricao.toLowerCase().includes(termo))
   );
 }
@@ -296,12 +302,13 @@ function renderKpis() {
 }
 
 function renderFiltros() {
+  // Os contadores respeitam o período e a busca, mas não a categoria escolhida
+  const base = gastosFiltrados({ ignorarCategoria: true });
   const contagem = {};
-  for (const g of gastos) contagem[g.categoria] = (contagem[g.categoria] || 0) + 1;
-  if (filtro !== 'Todos' && !contagem[filtro]) filtro = 'Todos';
+  for (const g of base) contagem[g.categoria] = (contagem[g.categoria] || 0) + 1;
 
-  const opcoes = [{ nome: 'Todos', qtd: gastos.length }]
-    .concat(categorias.filter((c) => contagem[c]).map((c) => ({ nome: c, qtd: contagem[c] })));
+  const opcoes = [{ nome: 'Todos', qtd: base.length }]
+    .concat(categorias.filter((c) => contagem[c] || c === filtro).map((c) => ({ nome: c, qtd: contagem[c] || 0 })));
 
   document.getElementById('filtros').innerHTML = opcoes.map((op) => `
     <button type="button" class="filtro ${op.nome === filtro ? 'ativo' : ''}" data-filtro="${escapar(op.nome)}" aria-pressed="${op.nome === filtro}">
@@ -313,7 +320,7 @@ function renderFiltros() {
 }
 
 function renderTabela() {
-  const lista = gastosVisiveis();
+  const lista = gastosFiltrados();
   const corpo = document.getElementById('lista');
 
   document.getElementById('resumo-tabela').textContent =
@@ -367,19 +374,6 @@ async function carregarGastos() {
     renderTudo();
   } catch (err) {
     toast(err.message, 'erro');
-  }
-}
-
-async function carregarStatus() {
-  const status = document.getElementById('status');
-  const texto = document.getElementById('status-texto');
-  try {
-    const s = await api('/api/status');
-    status.className = 'status ok';
-    texto.textContent = `Online · ${s.servidor} · RDS ${s.banco}`;
-  } catch {
-    status.className = 'status erro';
-    texto.textContent = 'Banco de dados desconectado';
   }
 }
 
@@ -531,7 +525,30 @@ document.getElementById('filtros').addEventListener('click', (evento) => {
 
 document.getElementById('busca').addEventListener('input', (evento) => {
   busca = evento.target.value;
+  renderFiltros();
   renderTabela();
+});
+
+// ---------- filtro por período ----------
+
+const campoDe = document.getElementById('data-de');
+const campoAte = document.getElementById('data-ate');
+const btnLimparDatas = document.getElementById('btn-limpar-datas');
+
+function aplicarPeriodo() {
+  dataDe = campoDe.value;
+  dataAte = campoAte.value;
+  btnLimparDatas.hidden = !dataDe && !dataAte;
+  renderFiltros();
+  renderTabela();
+}
+
+campoDe.addEventListener('change', aplicarPeriodo);
+campoAte.addEventListener('change', aplicarPeriodo);
+btnLimparDatas.addEventListener('click', () => {
+  campoDe.value = '';
+  campoAte.value = '';
+  aplicarPeriodo();
 });
 
 // ---------- início ----------
@@ -549,7 +566,6 @@ async function iniciar() {
   await document.fonts.ready;
   criarGraficos();
   await carregarGastos();
-  carregarStatus();
 }
 
 iniciar();

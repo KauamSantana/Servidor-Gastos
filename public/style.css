@@ -92,35 +92,11 @@ h1, h2, h3, p { margin: 0; }
 }
 .logo .icone { width: 22px; height: 22px; }
 .marca h1 { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
-.marca p { font-size: 12px; color: var(--suave); }
-
-.status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
-  border: 1px solid var(--borda);
-  border-radius: 999px;
-  background: var(--card);
-  font-size: 12px;
-  color: var(--texto-2);
-}
-.status-ponto {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--suave);
-}
-.status.ok .status-ponto { background: var(--destaque); box-shadow: 0 0 0 4px var(--destaque-tinta); }
-.status.erro { border-color: rgba(248, 113, 113, 0.4); }
-.status.erro .status-ponto { background: var(--perigo); box-shadow: 0 0 0 4px var(--perigo-tinta); }
-
-.topo-acoes { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 
 /* ---------- Layout ---------- */
 main {
   max-width: 1240px;
-  margin: 24px auto;
+  margin: 24px auto 48px;
   padding: 0 16px;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -187,7 +163,14 @@ main {
   flex-shrink: 0;
 }
 
-/* ---------- Abas ---------- */
+/* ---------- Abas + botão Novo gasto ---------- */
+.barra {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
 .abas {
   display: flex;
   gap: 6px;
@@ -355,6 +338,38 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .busca input { border: none; background: transparent; padding: 9px 0; box-shadow: none; }
 .busca input:focus { box-shadow: none; }
 
+/* Filtro por período (De / Até) */
+.ferramentas { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; flex: 1; }
+.periodo { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.campo-data {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--card-2);
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-sm);
+  padding-left: 12px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.campo-data:hover { border-color: var(--borda-forte); }
+.campo-data:focus-within { border-color: var(--destaque); box-shadow: 0 0 0 3px var(--destaque-tinta); }
+.campo-data span { font-size: 12px; color: var(--suave); }
+.campo-data input { flex: 1; min-width: 0; width: auto; border: none; background: transparent; padding: 8px 10px 8px 4px; }
+.campo-data input:focus { box-shadow: none; }
+.btn-limpar {
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  background: none;
+  border: none;
+  color: var(--destaque);
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+.btn-limpar:hover { background: var(--destaque-tinta); }
+.btn-limpar:focus-visible { outline: 2px solid var(--destaque); outline-offset: 2px; }
+
 .filtros {
   display: flex;
   flex-wrap: wrap;
@@ -464,7 +479,6 @@ td.numero { font-weight: 600; }
 .vazio strong { display: block; color: var(--texto-2); font-weight: 500; margin-bottom: 4px; }
 
 /* ---------- Rodapé ---------- */
-.rodape { text-align: center; color: var(--suave); font-size: 12px; padding: 8px 16px 32px; }
 
 /* ---------- Modal ---------- */
 .modal {
@@ -573,7 +587,9 @@ td.numero { font-weight: 600; }
 }
 @media (max-width: 720px) {
   .kpis { grid-template-columns: minmax(0, 1fr); }
-  .topo-acoes { width: 100%; justify-content: space-between; }
+  .barra > .btn { width: 100%; }
+  .ferramentas, .periodo { width: 100%; }
+  .campo-data { flex: 1; }
   .modal-form { padding: 20px; }
   .linha-2 { grid-template-columns: minmax(0, 1fr); }
   .grafico-area { height: 300px; }
