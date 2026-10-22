@@ -409,8 +409,7 @@ function limparForm() {
   campos.data.value = hoje();
   erroForm.hidden = true;
   document.getElementById('titulo-form').textContent = 'Novo gasto';
-  document.getElementById('sub-form').textContent = 'Preencha e clique em cadastrar';
-  btnSalvar.innerHTML = '<svg class="icone"><use href="#i-mais"/></svg><span>Cadastrar gasto</span>';
+  document.getElementById('sub-form').textContent = 'Preencha e clique em salvar';
 }
 
 function novoGasto() {
@@ -429,8 +428,7 @@ function editar(id) {
   campos.data.value = g.data;
   form.elements.categoria.value = g.categoria;
   document.getElementById('titulo-form').textContent = 'Editar gasto';
-  document.getElementById('sub-form').textContent = 'Altere os campos e salve';
-  btnSalvar.innerHTML = '<svg class="icone"><use href="#i-check"/></svg><span>Salvar alterações</span>';
+  document.getElementById('sub-form').textContent = 'Altere os campos e clique em salvar';
   modalGasto.showModal();
   campos.descricao.focus();
 }
