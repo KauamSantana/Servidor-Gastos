@@ -16,10 +16,10 @@ const campos = {
   valor: document.getElementById('valor'),
   data: document.getElementById('data'),
 };
-const cardForm = document.getElementById('card-form');
 const btnSalvar = document.getElementById('btn-salvar');
-const btnCancelar = document.getElementById('btn-cancelar');
-const modal = document.getElementById('modal-excluir');
+const erroForm = document.getElementById('erro-form');
+const modalGasto = document.getElementById('modal-gasto');
+const modalExcluir = document.getElementById('modal-excluir');
 
 let categorias = [];
 let gastos = [];
@@ -320,7 +320,7 @@ function renderTabela() {
     `${plural(lista.length, 'lançamento', 'lançamentos')} · ${moeda.format(soma(lista))}`;
 
   if (!gastos.length) {
-    corpo.innerHTML = `<tr><td colspan="5" class="vazio"><strong>Nenhum gasto cadastrado ainda</strong>Use o formulário para cadastrar o primeiro.</td></tr>`;
+    corpo.innerHTML = `<tr><td colspan="5" class="vazio"><strong>Nenhum gasto cadastrado ainda</strong>Clique em Novo gasto para cadastrar o primeiro.</td></tr>`;
     return;
   }
   if (!lista.length) {
@@ -329,7 +329,7 @@ function renderTabela() {
   }
 
   corpo.innerHTML = lista.map((g) => `
-    <tr class="${g.id === editandoId ? 'editando' : ''}">
+    <tr>
       <td class="col-data">${formatarData(g.data)}</td>
       <td class="col-desc">${escapar(g.descricao)}</td>
       <td><span class="badge"><span class="ponto" style="background:${corDe(g.categoria)}"></span>${escapar(g.categoria)}</span></td>
@@ -354,6 +354,7 @@ function renderPilulas() {
 }
 
 function renderTudo() {
+  document.getElementById('aba-contagem').textContent = gastos.length;
   renderKpis();
   renderGraficos();
   renderFiltros();
@@ -382,59 +383,63 @@ async function carregarStatus() {
   }
 }
 
-// ---------- formulário ----------
+// ---------- abas ----------
+
+function mostrarAba(nome) {
+  const aba = nome === 'lancamentos' ? 'lancamentos' : 'visao';
+  document.querySelectorAll('.aba').forEach((botao) => {
+    const ativa = botao.dataset.aba === aba;
+    botao.classList.toggle('ativa', ativa);
+    botao.setAttribute('aria-selected', ativa);
+  });
+  document.getElementById('aba-visao').hidden = aba !== 'visao';
+  document.getElementById('aba-lancamentos').hidden = aba !== 'lancamentos';
+  // Guarda a aba no endereço para ela continuar aberta ao atualizar a página
+  history.replaceState(null, '', aba === 'visao' ? location.pathname : '#lancamentos');
+  if (aba === 'visao') {
+    graficoCategoria?.resize();
+    graficoMes?.resize();
+  }
+}
+
+document.querySelector('.abas').addEventListener('click', (evento) => {
+  const botao = evento.target.closest('[data-aba]');
+  if (botao) mostrarAba(botao.dataset.aba);
+});
+
+// ---------- modal de cadastro e edição ----------
 
 function limparForm() {
   editandoId = null;
   form.reset();
   campos.data.value = hoje();
-  cardForm.classList.remove('editando');
+  erroForm.hidden = true;
   document.getElementById('titulo-form').textContent = 'Novo gasto';
   document.getElementById('sub-form').textContent = 'Preencha e clique em cadastrar';
   btnSalvar.innerHTML = '<svg class="icone"><use href="#i-mais"/></svg><span>Cadastrar gasto</span>';
-  btnCancelar.hidden = true;
+}
+
+function novoGasto() {
+  limparForm();
+  modalGasto.showModal();
+  campos.descricao.focus();
 }
 
 function editar(id) {
   const g = gastos.find((item) => item.id === id);
   if (!g) return;
+  limparForm();
   editandoId = id;
   campos.descricao.value = g.descricao;
   campos.valor.value = g.valor;
   campos.data.value = g.data;
   form.elements.categoria.value = g.categoria;
-  cardForm.classList.add('editando');
-  document.getElementById('titulo-form').textContent = 'Editando gasto';
+  document.getElementById('titulo-form').textContent = 'Editar gasto';
   document.getElementById('sub-form').textContent = 'Altere os campos e salve';
   btnSalvar.innerHTML = '<svg class="icone"><use href="#i-check"/></svg><span>Salvar alterações</span>';
-  btnCancelar.hidden = false;
-  renderTabela();
-  cardForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  campos.descricao.focus({ preventScroll: true });
+  modalGasto.showModal();
+  campos.descricao.focus();
 }
-
-function pedirExclusao(id) {
-  const g = gastos.find((item) => item.id === id);
-  if (!g) return;
-  idParaExcluir = id;
-  document.getElementById('modal-texto').textContent = `"${g.descricao}" · ${moeda.format(g.valor)} será removido permanentemente.`;
-  modal.returnValue = '';
-  modal.showModal();
-}
-
-modal.addEventListener('close', async () => {
-  if (modal.returnValue !== 'confirmar' || idParaExcluir === null) return;
-  const id = idParaExcluir;
-  idParaExcluir = null;
-  try {
-    await api(`${API}/${id}`, { method: 'DELETE' });
-    if (editandoId === id) limparForm();
-    toast('Gasto excluído.');
-    await carregarGastos();
-  } catch (err) {
-    toast(err.message, 'erro');
-  }
-});
 
 form.addEventListener('submit', async (evento) => {
   evento.preventDefault();
@@ -444,27 +449,69 @@ form.addEventListener('submit', async (evento) => {
     categoria: form.elements.categoria.value,
     data: campos.data.value,
   });
+  const editando = editandoId;
   btnSalvar.disabled = true;
   try {
-    if (editandoId) {
-      await api(`${API}/${editandoId}`, { method: 'PUT', body: corpo });
-      toast('Gasto atualizado.');
+    if (editando) {
+      await api(`${API}/${editando}`, { method: 'PUT', body: corpo });
     } else {
       await api(API, { method: 'POST', body: corpo });
-      toast('Gasto cadastrado.');
     }
-    limparForm();
+    modalGasto.close();
+    toast(editando ? 'Gasto atualizado.' : 'Gasto cadastrado.');
     await carregarGastos();
   } catch (err) {
-    toast(err.message, 'erro');
+    // O modal fica por cima de tudo, então o erro aparece dentro dele
+    erroForm.textContent = err.message;
+    erroForm.hidden = false;
   } finally {
     btnSalvar.disabled = false;
   }
 });
 
-btnCancelar.addEventListener('click', () => {
-  limparForm();
-  renderTabela();
+modalGasto.addEventListener('close', limparForm);
+document.getElementById('btn-novo').addEventListener('click', novoGasto);
+document.getElementById('btn-cancelar').addEventListener('click', () => modalGasto.close());
+document.getElementById('btn-fechar').addEventListener('click', () => modalGasto.close());
+
+// Clicar no fundo escuro, fora do modal, fecha (só se o clique começou fora também)
+function fecharAoClicarFora(dialogo) {
+  const fora = (evento) => {
+    const r = dialogo.getBoundingClientRect();
+    return evento.target === dialogo &&
+      (evento.clientX < r.left || evento.clientX > r.right || evento.clientY < r.top || evento.clientY > r.bottom);
+  };
+  let comecouFora = false;
+  dialogo.addEventListener('mousedown', (evento) => { comecouFora = fora(evento); });
+  dialogo.addEventListener('click', (evento) => {
+    if (comecouFora && fora(evento)) dialogo.close();
+  });
+}
+fecharAoClicarFora(modalGasto);
+fecharAoClicarFora(modalExcluir);
+
+// ---------- modal de exclusão ----------
+
+function pedirExclusao(id) {
+  const g = gastos.find((item) => item.id === id);
+  if (!g) return;
+  idParaExcluir = id;
+  document.getElementById('modal-texto').textContent = `“${g.descricao}” · ${moeda.format(g.valor)} será removido permanentemente.`;
+  modalExcluir.returnValue = '';
+  modalExcluir.showModal();
+}
+
+modalExcluir.addEventListener('close', async () => {
+  if (modalExcluir.returnValue !== 'confirmar' || idParaExcluir === null) return;
+  const id = idParaExcluir;
+  idParaExcluir = null;
+  try {
+    await api(`${API}/${id}`, { method: 'DELETE' });
+    toast('Gasto excluído.');
+    await carregarGastos();
+  } catch (err) {
+    toast(err.message, 'erro');
+  }
 });
 
 document.getElementById('lista').addEventListener('click', (evento) => {
@@ -490,6 +537,7 @@ document.getElementById('busca').addEventListener('input', (evento) => {
 // ---------- início ----------
 
 async function iniciar() {
+  mostrarAba(location.hash.slice(1));
   try {
     categorias = await api('/api/categorias');
   } catch {
